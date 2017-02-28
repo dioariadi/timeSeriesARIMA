@@ -1,0 +1,117 @@
+
+
+# Library for analysis
+library(MVN)
+library(psych)
+library(nFactors)
+library(corrplot)
+library(nortest)
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(car)      # library for boxcox
+library(plotly)
+# time series
+library(forecast)
+library(tseries)
+
+
+#plot time series----
+
+# non interactive plot
+plotTS <- function(number){
+  ggplot(data_ts_inSample[number][[1]],aes(time,freq))+geom_line()
+}
+
+# for interactive plot, please change "n" value
+n=9
+plot_ly(data_ts_inSample[n][[1]],x=~time,y=~freq,type = "scatter",mode="lines")
+
+
+#boxcox and get value of lambda each variable----
+
+lamda <- list()
+for(i in 1:length(data_ts_inSample)){
+  if(sum(data_ts_inSample[i][[1]]$freq)==366){
+    lamda[i] <- list(1)
+  } else {
+    lamda[i]<- list(powerTransform(data_ts_inSample[i][[1]]$freq~1,data_ts_inSample[i][[1]]))
+    lamda[i]<- list(lamda[[i]]$lambda)
+  }
+}
+
+for(i in 1:length(lamda)){
+  lamda[[i]]<- unname(lamda[[i]]) # to get value only
+}
+
+for(i in 1:length(data_ts_inSample)){
+  data_ts_inSample[[i]]<-list(data_ts_inSample[[i]],lamda=lamda[[i]]) # merge data and lambda's value
+}
+
+data_ts_inSample_v2 <- data_ts_inSample
+for(i in 1:length(data_ts_inSample)){
+  data_ts_inSample_v2[i][[1]][[1]]$freq <- data_ts_inSample[i][[1]][[1]]$freq^data_ts_inSample[[i]]$lamda
+}
+
+# adf test for stationarty in mean----
+hasil <- list()
+for(i in 1:length(data_ts_inSample_v2)){
+  if(sum(data_ts_inSample_v2[i][[1]][[1]]$freq)==366){
+    hasil[i] <- 0
+  } else {
+    hasil[i]<- list(adf.test(data_ts_inSample_v2[i][[1]][[1]]$freq))
+    hasil[i] <- list(hasil[[i]]$alternative)
+  }
+  print(hasil[[i]])
+}
+
+# continue if all value "stationary", if not there will be some tweak again in script !!
+# lucky in this data the output is stationary, value "0" please look into data, value from all date is 1
+
+#ARIMA----
+
+hasilARIMA=list()
+for(i in 1:length(data_ts_inSample)){
+  hasilARIMA[i]=list(auto.arima(data_ts_inSample[i][[1]][[1]]$freq,stationary = TRUE,seasonal=TRUE,
+                                lambda=data_ts_inSample[[i]]$lamda))
+}
+
+prediksi_arima = list()
+for(i in 1:length(hasilARIMA)){
+  prediksi_arima[i]=list(predict(hasilARIMA[i][[1]],n.ahead=53))
+  prediksi_arima[[i]] = list(prediksi_arima[[i]],lamda=lamda[[i]])
+  prediksi_arima[i][[1]][[1]]$pred <-  prediksi_arima[i][[1]][[1]]$pred^(1/prediksi_arima[[i]]$lamda)
+}
+
+for(i in 1:length(prediksi_arima)){
+  names(prediksi_arima[[i]]) <-names(data_ts_inSample_v2[i])
+}
+
+
+data_predik <- as.data.frame(numeric())
+for(i in 1:length(prediksi_arima)){
+  data_predik[1:53,i]<-prediksi_arima[i][[1]][[1]]$pred
+}
+
+
+data_predik <- as.data.frame(prediksi_arima[])
+data_ts_outSample[,1]
+
+prediksi_arima[i][[1]][[1]]$pred
+
+data_predik <- data.frame(bencana_banjir=prediksi_arima[5][[1]]$pred,
+                          fasum=prediksi_arima[9][[1]]$pred,
+                          ikli = prediksi_arima[12][[1]]$pred,
+                          jalan_rusak = prediksi_arima[14][[1]]$pred,
+                          kaki_lima_liar = prediksi_arima[16][[1]]$pred,
+                          kemacetan = prediksi_arima[20][[1]]$pred,
+                          PJURusak = prediksi_arima[23][[1]]$pred,
+                          parli = prediksi_arima[33][[1]]$pred,
+                          pelanggaran = prediksi_arima[34][[1]]$pred,
+                          sampah = prediksi_arima[48][[1]]$pred)
+
+sum(data_predik[32:53,10])
+data_predik <- round(data_predik)
+bencana_banjir<- data.frame(bencana_banjir)
+
